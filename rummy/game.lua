@@ -31,7 +31,7 @@ function Game:_newCards ()
             table.insert(cards, card)
         end
     end
-    utils.shuffleInPlace(cards)
+    utils:shuffleInPlace(cards)
     local cardSet = {}
     for pos, card in ipairs(cards) do
         card.pos = pos

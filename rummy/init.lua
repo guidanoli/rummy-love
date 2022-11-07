@@ -1,4 +1,5 @@
 local constants = require "rummy.constants"
+local utils = require "rummy.utils"
 local Game = require "rummy.game"
 local Meld = require "rummy.meld"
 
@@ -161,6 +162,55 @@ function rummy:moveCardSmoothly (card)
     }
 end
 
+function rummy:isShiftPressed ()
+    return self.pressedKeys.lshift or
+           self.pressedKeys.rshift
+end
+
+function rummy:getShiftSelection (card2)
+    local selection = {}
+    local card1 = self.lastSelectedCard
+    if card1 ~= nil then
+        local firstPos, lastPos = utils:orderOpenEnded(card1.pos, card2.pos)
+        if card1.where == card2.where then
+            if card1.where == 'meld' then
+                if card1.meld == card2.meld then
+                    local cards = self.game:getCards()
+                    local meld = cards.melds[card1.meld]
+                    for pos = firstPos, lastPos do
+                        local card = meld[pos]
+                        selection[card] = true
+                    end
+                else
+                    print("Selection spans different melds")
+                end
+            elseif card1.where == 'hand' then
+                local cards = self.game:getCards()
+                local hand = cards.hand
+                for pos = firstPos, lastPos do
+                    local card = hand[pos]
+                    selection[card] = true
+                end
+            end
+        else
+            print("Selection spans cards in different locations")
+        end
+    else
+        selection[card2] = true
+    end
+    return selection
+end
+
+function rummy:getSelection (card)
+    if self:isShiftPressed() then
+        return self:getShiftSelection(card)
+    else
+        local selection = {}
+        selection[card] = true
+        return selection
+    end
+end
+
 function rummy:onCardLeftClick (card)
     if card.where == 'stock' then
         if self.game:isValid() then
@@ -170,10 +220,14 @@ function rummy:onCardLeftClick (card)
             self.updatePending = true
         end
     else
-        -- if not card.animation then
-        --     saveState()
-        --     card.selected = not card.selected
-        -- end
+        if not card.animation then
+            local selection = self:getSelection (card)
+            for card in pairs(selection) do
+                card.selected = not card.selected
+            end
+            self.lastSelectedCard = card
+            self.updatePending = true
+        end
     end
 end
 
@@ -240,13 +294,14 @@ end
 --         self:moveCardSmoothly(card)
 --     end
 -- end
--- 
--- local function unselectCards (cards)
---     for _, card in pairs(cards) do
---         card.selected = false
---     end
--- end
--- 
+
+function rummy:clearSelection ()
+    for card in self.game:iterCards() do
+        card.selected = false
+    end
+    self.lastSelectedCard = nil
+end
+
 -- local function moveCardsFromGameToGame (selection, destGamePos)
 --     saveState()
 --     for _, card in ipairs(selection) do
@@ -502,10 +557,10 @@ function rummy:load ()
     love.window.setMode(1280, 720)
     love.window.setTitle("Rummy")
 
-    self.history = {}
-
     math.randomseed(os.time())
     self.game = Game:new()
+
+    self.history = {}
 
     self.images = {}
     self.images.stock = love.graphics.newImage('images/vstock/red.png')
@@ -525,6 +580,8 @@ function rummy:load ()
     for card in self.game:iterCards() do
         table.insert(self.cardRenderingOrder, card)
     end
+
+    self.pressedKeys = {}
 end
  
 function rummy:draw ()
@@ -557,17 +614,15 @@ function rummy:mousepressed (x, y, button)
 end
  
 function rummy:keypressed (key)
-    -- self.updatePending = true
-    -- if key == 'e' then
-    --     saveState()
-    --     unselectCards(state.cards)
-    -- elseif key == 'u' then
-    --     restorePrevState()
-    -- elseif key == 'r' then
-    --     updateCardPositions()
-    -- elseif key == 'd' then
-    --     debugState()
-    -- end
+    self.pressedKeys[key] = true
+    if key == 'c' then
+        self:clearSelection()
+        self.updatePending = true
+    end
+end
+
+function rummy:keyreleased (key)
+    self.pressedKeys[key] = nil
 end
 
 function rummy:update (dt)
