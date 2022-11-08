@@ -7,36 +7,8 @@ local Meld = require "rummy.meld"
 
 local rummy = {}
 
-local debug = os.getenv "DEBUG" ~= nil
+rummy.debug = os.getenv "DEBUG" ~= nil
 
--- -- {
--- --   cards : {
--- --     [key : integer] : {
--- --       suit : string = "spades" | "diamonds" | "clubs" | "hearts",
--- --       rank : number = 1 | 2 | ... | 13,
--- --       where : string = "stock" | "hand" | "game" | "limbo",
--- --       pos : integer?,
--- --       selected : boolean,
--- --       gpos : integer?,
--- --       x : integer,
--- --       y : integer,
--- --       w : integer,
--- --       h : integer,
--- --       animation : {
--- --         name : string = "smooth",
--- --         time : float?,
--- --         duration : float?,
--- --       }?,
--- --     },
--- --   },
--- -- }
--- 
--- -- {
--- --   [key : integer] : State
--- -- }
--- local history = {}
-
- 
 -- local function deepCopy (o)
 --     if type(o) == 'table' then
 --         local t = {}
@@ -69,22 +41,6 @@ function rummy:clearHistory ()
     self.history = {}
 end
 
--- local function shuffleInPlace (t)
---     for i = #t, 2, -1 do
---         local j = math.random(i)
---         t[i], t[j] = t[j], t[i]
---     end
--- end
--- 
--- local function isTrueToAll (t, f, ...)
---     for _, v in pairs(t) do
---         if not f(v, ...) then
---             return false
---         end
---     end
---     return true
--- end
-
 function rummy:isPositionInsideCard (x, y, w, h, card)
     return (x >= card.x) and
            (x <= (card.x + w)) and
@@ -92,68 +48,22 @@ function rummy:isPositionInsideCard (x, y, w, h, card)
            (y <= (card.y + h))
 end
 
--- local function getAnimatedCards ()
---     local animatedCards = {}
---     for _, card in pairs(state.cards) do
---         if card.animation then
---             table.insert(animatedCards, card)
---         end
---     end
---     return animatedCards
--- end
--- 
--- local function compareCards (card1, card2)
---     if card1.rank == card2.rank then
---         return card1.suit < card2.suit
---     else
---         return card1.rank < card2.rank
---     end
--- end
--- 
--- local function sortCards (cards)
---     table.sort(cards, compareCards)
--- end
--- 
--- local function setPlayerHand (hand)
---     sortCards(hand)
---     for pos, card in ipairs(hand) do
---         card.where = 'hand'
---         card.pos = pos
---     end
--- end
--- 
--- local function setGame (gpos, game)
---     sortCards(game)
---     for pos, card in ipairs(game) do
---         card.where = 'game'
---         card.gpos = gpos
---         card.pos = pos
---     end
--- end
--- 
--- local function setGames (games)
---     for gpos, game in pairs(games) do
---         setGame(gpos, game)
---     end
--- end
- 
+local function orderRenderingOrder (card1, card2)
+    return card1.pos < card2.pos
+end
+
 function rummy:updateCardRenderingOrder ()
-    table.sort(self.cardRenderingOrder, function (card1, card2)
-        return card1.pos < card2.pos
-    end)
+    table.sort(self.cardRenderingOrder, orderRenderingOrder)
 end
 
 function rummy:getCardAtPosition (x, y)
-    local topcard
-    for card in self.game:iterCards() do
+    for i = #self.cardRenderingOrder, 1, -1 do
+        local card = self.cardRenderingOrder[i]
         local w, h = self:getCardImage(card):getDimensions()
         if self:isPositionInsideCard(x, y, w, h, card) then
-            if topcard == nil or card.pos > topcard.pos then
-                topcard = card
-            end
+            return card
         end
     end
-    return topcard
 end
 
 function rummy:moveSelectionSmoothly (sel)
@@ -214,18 +124,6 @@ function rummy:onCardLeftClick (card)
     end
 end
 
--- local function checkNextTurn ()
---     if state.hasPlacedCard and areMeldsValid() then
---         self:clearHistory()
---     end
--- end
--- 
--- local function moveCardToLimbo (card)
---     card.where = 'limbo'
---     card.pos = 0
---     card.gpos = nil
--- end
--- 
 -- local function removeEmptyGames ()
 --     local gpos = 1
 --     for _, game in pairs(getGames()) do
@@ -421,65 +319,6 @@ function rummy:updateCardPositions ()
     end
 end
 
--- local function sortedPairs(t)
--- 	local keys = {}
--- 	for key in pairs(t) do table.insert(keys, key) end
--- 	table.sort(keys, function(a, b)
--- 		local ta, tb = type(a), type(b)
--- 		if ta == tb then
--- 			if ta == 'string' or ta == 'number' then
--- 				return a < b
--- 			elseif ta == 'boolean' then
--- 				return b and not a
--- 			else
--- 				return false -- Can't compare
--- 			end
--- 		else
--- 			return ta < tb -- Arbitrary type order
--- 		end
--- 	end)
--- 	local i = 0 -- iterator variable
--- 	local iter = function() -- iterator function
--- 		i = i + 1
--- 		local key = keys[i]
--- 		if key == nil then return nil
--- 		else return key, t[key]
--- 		end
--- 	end
--- 	return iter
--- end
--- 
--- local function pretty(obj)
--- 	local function _pretty(obj, pad, visited)
--- 		if type(obj) == "table" then
--- 			if next(obj) == nil then
--- 				return "{}"
--- 			elseif visited[obj] then
--- 				return "{...}"
--- 			else
--- 				local s = "{\n"
--- 				local newpad = pad .. "    "
--- 				visited[obj] = true
--- 				for key, value in sortedPairs(obj) do
--- 					s = s .. newpad .. "[" .. _pretty(key, newpad, visited) .. "] = " .. 
--- 					                          _pretty(value, newpad, visited) .. ",\n"
--- 				end
--- 				return s .. pad .. "}"
--- 			end
--- 		elseif type(obj) == "string" then
--- 			return string.format("%q", obj)
--- 		else
--- 			return tostring(obj)
--- 		end
--- 	end
--- 
--- 	return _pretty(obj, "", {})
--- end
--- 
--- local function debugState ()
---     print(pretty(state))
--- end
-
 function rummy:updateCardAnimations (dt)
     for card in self.game:iterCards() do
         if card.animation then
@@ -588,7 +427,7 @@ function rummy:keypressed (key)
         self:clearSelection()
         self.updatePending = true
     elseif key == 'i' then
-        if debug then
+        if self.debug then
             print(inspect(self.game))
         end
     end
