@@ -49,6 +49,7 @@ function Game:_dealCards ()
         hand[i] = card
     end
     Meld:sort(hand)
+    Meld:updatePos(hand)
 end
 
 function Game:iterCards ()
@@ -82,14 +83,6 @@ function Game:getCards ()
     }
 end
 
-function Game:sort ()
-    local cards = self:getCards()
-    Meld:sort(cards.hand)
-    for _, meld in pairs(cards.meld) do
-        Meld:sort(meld)
-    end
-end
-
 function Game:isValid ()
     local cards = self:getCards()
     for _, meld in pairs(cards.melds) do
@@ -102,9 +95,11 @@ end
 
 function Game:addCardToHand (card)
     local cards = self:getCards()
-    table.insert(cards.hand, card)
+    local hand = cards.hand
+    table.insert(hand, card)
     card.where = 'hand'
-    Meld:sort(cards.hand)
+    Meld:sort(hand)
+    Meld:updatePos(hand)
 end
 
 function Game:getCardsBetween (card1, card2)
@@ -145,7 +140,7 @@ function Game:newMeldFromSelection (sel, originMeld)
     local meld = Meld:fromSelection(sel)
     if Meld:isValid(meld) then
         Meld:subtract(originMeld, meld)
-        Meld:sort(meld)
+        Meld:updatePos(meld)
         local cards = self:getCards()
         local newMeldId = #cards.melds + 1
         for _, card in ipairs(meld) do

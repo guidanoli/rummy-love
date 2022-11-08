@@ -33,7 +33,7 @@ function Meld:hasNoMiddleAce (meld)
             return false
         end
     end
-    return false
+    return true
 end
 
 function Meld:hasNoDuplicateAce (meld)
@@ -89,7 +89,7 @@ function Meld:isValid (meld)
            self:isSet(meld)
 end
 
-local function compareCards (card1, card2)
+local function orderWithStartingAce (card1, card2)
     if card1.rank == card2.rank then
         return card1.suit < card2.suit
     else
@@ -97,8 +97,32 @@ local function compareCards (card1, card2)
     end
 end
 
+local function orderWithEndingAce (card1, card2)
+    if card1.rank == card2.rank then
+        return card1.suit < card2.suit
+    else
+        return (card1.rank + 11) % 13 < (card2.rank + 11) % 13
+    end
+end
+
+function Meld:containsCardOfRank (meld, rank)
+    for _, card in pairs(meld) do
+        if card.rank == rank then
+            return true
+        end
+    end
+    return false
+end
+
 function Meld:sort (meld)
-    table.sort(meld, compareCards)
+    if self:containsCardOfRank(meld, 2) then
+        table.sort(meld, orderWithStartingAce)
+    else
+        table.sort(meld, orderWithEndingAce)
+    end
+end
+
+function Meld:updatePos (meld)
     for pos, card in pairs(meld) do
         card.pos = pos
     end
@@ -109,6 +133,7 @@ function Meld:fromSelection (sel)
     for card in pairs(sel) do
         table.insert(meld, card)
     end
+    self:sort(meld)
     return meld
 end
 
@@ -133,7 +158,7 @@ function Meld:subtract (meld1, meld2)
         end
     end
     local newMeld = self:fromSelection(newSel)
-    self:sort(newMeld)
+    self:updatePos(newMeld)
 end
 
 return Meld
