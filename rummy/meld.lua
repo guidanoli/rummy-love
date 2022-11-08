@@ -89,4 +89,51 @@ function Meld:isValid (meld)
            self:isSet(meld)
 end
 
+local function compareCards (card1, card2)
+    if card1.rank == card2.rank then
+        return card1.suit < card2.suit
+    else
+        return card1.rank < card2.rank
+    end
+end
+
+function Meld:sort (meld)
+    table.sort(meld, compareCards)
+    for pos, card in pairs(meld) do
+        card.pos = pos
+    end
+end
+
+function Meld:fromSelection (sel)
+    local meld = {}
+    for card in pairs(sel) do
+        table.insert(meld, card)
+    end
+    return meld
+end
+
+function Meld:toSelection (meld)
+    local sel = {}
+    for _, card in ipairs(meld) do
+        sel[card] = true
+    end
+    return sel
+end
+
+-- Update meld1 positions by removing
+-- all cards in it that are contained
+-- in meld2 (meld2 is not updated)
+function Meld:subtract (meld1, meld2)
+    local newSel = {}
+    local sel1 = self:toSelection(meld1)
+    local sel2 = self:toSelection(meld2)
+    for card in pairs(sel1) do
+        if sel2[card] == nil then
+            newSel[card] = true
+        end
+    end
+    local newMeld = self:fromSelection(newSel)
+    self:sort(newMeld)
+end
+
 return Meld

@@ -48,7 +48,7 @@ function Game:_dealCards ()
         card.where = 'hand'
         hand[i] = card
     end
-    self:sortMeld(hand)
+    Meld:sort(hand)
 end
 
 function Game:iterCards ()
@@ -82,29 +82,11 @@ function Game:getCards ()
     }
 end
 
-function Game:sortCards ()
+function Game:sort ()
     local cards = self:getCards()
-    self:sortMeld(cards.hand, 'hand')
+    Meld:sort(cards.hand)
     for _, meld in pairs(cards.meld) do
-        self:sortMeld(meld, 'meld')
-    end
-end
-
-local function compareCards (card1, card2)
-    if card1.rank == card2.rank then
-        return card1.suit < card2.suit
-    else
-        return card1.rank < card2.rank
-    end
-end
-
-function Game:sortMeld (meld, where)
-    table.sort(meld, compareCards)
-    for pos, card in pairs(meld) do
-        card.pos = pos
-        if where ~= nil then
-            card.where = where
-        end
+        Meld:sort(meld)
     end
 end
 
@@ -121,7 +103,57 @@ end
 function Game:addCardToHand (card)
     local cards = self:getCards()
     table.insert(cards.hand, card)
-    self:sortMeld(cards.hand, 'hand')
+    card.where = 'hand'
+    Meld:sort(cards.hand)
+end
+
+function Game:getCardsBetween (card1, card2)
+    local cardsInBetween = {}
+    local cards = self:getCards()
+    local pos1, pos2 = utils:orderOpenEnded(card1.pos, card2.pos)
+    if card1.where == card2.where then
+        if card1.where == 'meld' then
+            if card1.meld == card2.meld then
+                local meld = cards.melds[card1.meld]
+                for pos = pos1, pos2 do
+                    local card = meld[pos]
+                    cardsInBetween[card] = true
+                end
+            end
+        elseif card1.where == 'hand' then
+            local hand = cards.hand
+            for pos = pos1, pos2 do
+                local card = hand[pos]
+                cardsInBetween[card] = true
+            end
+        end
+    end
+    return cardsInBetween
+end
+
+function Game:getSelection ()
+    local selection = {}
+    for card in self:iterCards() do
+        if card.selected then
+            selection[card] = true
+        end
+    end
+    return selection
+end
+
+function Game:newMeldFromSelection (sel, originMeld)
+    local meld = Meld:fromSelection(sel)
+    if Meld:isValid(meld) then
+        Meld:subtract(originMeld, meld)
+        Meld:sort(meld)
+        local cards = self:getCards()
+        local newMeldId = #cards.melds + 1
+        for _, card in ipairs(meld) do
+            card.where = 'meld'
+            card.meld = newMeldId
+        end
+        return meld
+    end
 end
 
 return Game

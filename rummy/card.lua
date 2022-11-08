@@ -33,6 +33,9 @@ local validators = {
     selected = function (s)
         assert(type(s) == 'boolean')
     end,
+    meld = function (m)
+        assert(m == nil or type(m) == 'number')
+    end
 }
 
 function Card:__newindex(key, value)
