@@ -9,6 +9,12 @@ function Card:__tostring()
 end
 
 local validators = {
+    rank = function (r)
+        assert(constants.ranks[r] == true)
+    end,
+    suit = function (s)
+        assert(constants.suits[s] == true)
+    end,
     where = function (w)
         assert(constants.where[w] == true)
     end,
@@ -33,31 +39,31 @@ local validators = {
     selected = function (s)
         assert(type(s) == 'boolean')
     end,
-    meld = function (m)
+    meldpos = function (m)
         assert(m == nil or type(m) == 'number')
     end
 }
 
-function Card:__newindex(key, value)
+local function validate(key, value)
     local validator = validators[key]
     if validator == nil then
         error(("invalid key '%s'"):format(key))
     else
         validator(value)
     end
+end
+
+function Card:__newindex(key, value)
+    validate(key, value)
     rawset(self, key, value)
 end
 
 function Card:new(t)
-    self:_validateArguments(t)
+    for k, v in pairs(t) do
+        validate(k, v)
+    end
     setmetatable(t, self)
     return t
-end
-
-function Card:_validateArguments(t)
-    assert(constants.ranks[t.rank] == true)
-    assert(constants.suits[t.suit] == true)
-    assert(constants.where[t.where] == true)
 end
 
 return Card

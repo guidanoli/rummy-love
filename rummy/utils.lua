@@ -15,4 +15,29 @@ function utils:orderOpenEnded (a, b)
     end
 end
 
+function utils:sortedKeys (t, cmp)
+    local keys = {}
+    for key in pairs(t) do
+        table.insert(keys, key)
+    end
+    table.sort(keys, cmp)
+    return keys
+end
+
+function utils:deepCopy (o)
+    if type(o) == 'table' then
+        local t = {}
+        local mt = getmetatable(o)
+        setmetatable(t, mt)
+        for k, v in pairs(o) do
+            local kcopy = self:deepCopy(k)
+            local vcopy = self:deepCopy(v)
+            t[kcopy] = vcopy
+        end
+        return t
+    else
+        return o
+    end
+end
+
 return utils

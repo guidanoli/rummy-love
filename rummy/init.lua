@@ -9,33 +9,19 @@ local rummy = {}
 
 rummy.debug = os.getenv "DEBUG" ~= nil
 
--- local function deepCopy (o)
---     if type(o) == 'table' then
---         local t = {}
---         for k, v in pairs(o) do
---             k = deepCopy(k)
---             v = deepCopy(v)
---             t[k] = v
---         end
---         return t
---     else
---         return o
---     end
--- end
--- 
--- local function saveState ()
---     local stateCopy = deepCopy(state)
---     table.insert(history, stateCopy)
--- end
--- 
--- local function restorePrevState ()
---     if #history > 0 then
---         state = table.remove(history)
---         updatePending = true
---     else
---         print("No previous state to restore")
---     end
--- end
+function rummy:save ()
+    local clone = self.game:clone()
+    table.insert(self.history, clone)
+end
+
+function rummy:undo ()
+    if #self.history > 0 then
+        self.game = table.remove(self.history)
+        self.updatePending = true
+    else
+        print("No previous state to restore")
+    end
+end
 
 function rummy:clearHistory ()
     self.history = {}
@@ -48,12 +34,17 @@ function rummy:isPositionInsideCard (x, y, w, h, card)
            (y <= (card.y + h))
 end
 
-local function orderRenderingOrder (card1, card2)
+local function compareCardsByPosition (card1, card2)
     return card1.pos < card2.pos
 end
 
 function rummy:updateCardRenderingOrder ()
-    table.sort(self.cardRenderingOrder, orderRenderingOrder)
+    local order = {}
+    for card in self.game:iterCards() do
+        table.insert(order, card)
+    end
+    table.sort(order, compareCardsByPosition)
+    self.cardRenderingOrder = order
 end
 
 function rummy:getCardAtPosition (x, y)
@@ -164,15 +155,15 @@ end
 --     end
 -- end
 
-function rummy:clearSelection ()
-    for card in self.game:iterCards() do
+function rummy:unselect (sel)
+    for card in pairs(sel) do
         card.selected = false
     end
     self.lastSelectedCard = nil
 end
 
 -- local function moveCardsFromGameToGame (selection, destGamePos)
---     saveState()
+--     save()
 --     for _, card in ipairs(selection) do
 --         removeCardFromGame(card)
 --         addCardToGame(card, destGamePos)
@@ -185,7 +176,7 @@ end
 -- local function moveCardsFromHandToGame (selection, destGamePos)
 --     local n = #selection
 --     if not state.hasPlacedCard and (n == 1 or n == 3) then
---         saveState()
+--         save()
 --         state.hasPlacedCard = true
 --         for _, card in ipairs(selection) do
 --             removeCardFromHand(card)
@@ -197,11 +188,11 @@ end
 -- end
 -- 
 -- local function onCardRightClick (card)
---     if card.where == 'game' then
+--     if card.where == 'meld' then
 --         local selection = getSelectionFromClick()
 --         if #selection > 0 then
 --             local selectionOrigin = getWhere(selection)
---             if selectionOrigin == 'game' then
+--             if selectionOrigin == 'meld' then
 --                 moveCardsFromGameToGame(selection, card.gpos)
 --             elseif selectionOrigin == 'hand' then
 --                 moveCardsFromHandToGame(selection, card.gpos)
@@ -220,33 +211,33 @@ end
 --         print("Can't move cards to stock")
 --     end
 -- end
--- 
--- local function moveCardsFromGameToTable (selection)
---     saveState()
---     for _, card in ipairs(selection) do
---         removeCardFromGame(card)
---     end
---     addGameToTable(selection)
---     removeEmptyGames()
---     unselectCards(selection)
---     checkNextTurn()
--- end
 
-function rummy:moveCardsFromHandToTable (sel)
-    local cards = self.game:getCards()
-    if self.game:newMeldFromSelection(sel, cards.hand) then
+function rummy:moveSelectionFromMeldToTable (sel, smeld, meld)
+    local newmeld = self.game:subtract(meld, smeld)
+    if #newmeld == 0 then
+        self.game:updateMeldPos()
+    end
+    self:moveSelectionSmoothly(sel)
+    self:unselect(sel)
+    self.updatePending = true
+end
+
+function rummy:moveSelectionFromHandToTable (sel, smeld, hand)
+    if Meld:isValid(smeld) then
+        self.game:subtract(hand, smeld)
         self:moveSelectionSmoothly(sel)
-        self:clearSelection()
+        self:unselect(sel)
         self:clearHistory()
         self.updatePending = true
     end
 end
 
-function rummy:onTableRightClick (sel, where)
-    if where == 'game' then
-        -- self:moveCardsFromGameToTable(sel)
+function rummy:onTableRightClick (sel, smeld, where, meld)
+    if where == 'meld' then
+        self:save()
+        self:moveSelectionFromMeldToTable(sel, smeld, meld)
     elseif where == 'hand' then
-        self:moveCardsFromHandToTable(sel)
+        self:moveSelectionFromHandToTable(sel, smeld, meld)
     end
 end
 
@@ -380,11 +371,6 @@ function rummy:load ()
 
     self.updatePending = true
 
-    self.cardRenderingOrder = {}
-    for card in self.game:iterCards() do
-        table.insert(self.cardRenderingOrder, card)
-    end
-
     self.pressedKeys = {}
 end
  
@@ -410,10 +396,11 @@ function rummy:mousepressed (x, y, button)
     elseif button == 2 then
         local card = self:getCardAtPosition(x, y)
         local sel = self.game:getSelection()
-        local where = selection:getWhere(sel)
+        local smeld = Meld:fromSelection(sel)
+        local where, meld = self.game:getWhere(sel)
         if where ~= nil then
             if card == nil then
-                self:onTableRightClick(sel, where)
+                self:onTableRightClick(sel, smeld, where, meld)
             else
                 -- onCardRightClick(card)
             end
@@ -424,8 +411,10 @@ end
 function rummy:keypressed (key)
     self.pressedKeys[key] = true
     if key == 'c' then
-        self:clearSelection()
+        self:unselect(self.game:getCardSet())
         self.updatePending = true
+    elseif key == 'u' then
+        self:undo()
     elseif key == 'i' then
         if self.debug then
             print(inspect(self.game))

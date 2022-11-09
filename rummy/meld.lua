@@ -148,17 +148,19 @@ end
 -- Update meld1 positions by removing
 -- all cards in it that are contained
 -- in meld2 (meld2 is not updated)
+-- Returns updated meld1
 function Meld:subtract (meld1, meld2)
-    local newSel = {}
+    local newsel1 = {}
     local sel1 = self:toSelection(meld1)
     local sel2 = self:toSelection(meld2)
     for card in pairs(sel1) do
         if sel2[card] == nil then
-            newSel[card] = true
+            newsel1[card] = true
         end
     end
-    local newMeld = self:fromSelection(newSel)
-    self:updatePos(newMeld)
+    local newmeld1 = self:fromSelection(newsel1)
+    self:updatePos(newmeld1)
+    return newmeld1
 end
 
 return Meld
