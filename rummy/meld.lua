@@ -1,3 +1,10 @@
+-- A meld is a list of cards
+--
+-- All functions from this module do not modify
+-- card properties!
+
+local Selection = require "rummy.selection"
+
 local Meld = {}
 
 function Meld:hasSameSuit (meld)
@@ -122,12 +129,6 @@ function Meld:sort (meld)
     end
 end
 
-function Meld:updatePos (meld)
-    for pos, card in pairs(meld) do
-        card.pos = pos
-    end
-end
-
 function Meld:fromSelection (sel)
     local meld = {}
     for card in pairs(sel) do
@@ -145,22 +146,18 @@ function Meld:toSelection (meld)
     return sel
 end
 
--- Update meld1 positions by removing
--- all cards in it that are contained
--- in meld2 (meld2 is not updated)
--- Returns updated meld1
-function Meld:subtract (meld1, meld2)
-    local newsel1 = {}
+function Meld:minus (meld1, meld2)
     local sel1 = self:toSelection(meld1)
     local sel2 = self:toSelection(meld2)
-    for card in pairs(sel1) do
-        if sel2[card] == nil then
-            newsel1[card] = true
-        end
-    end
-    local newmeld1 = self:fromSelection(newsel1)
-    self:updatePos(newmeld1)
-    return newmeld1
+    local newsel = Selection:minus(sel1, sel2)
+    return self:fromSelection(newsel)
+end
+
+function Meld:plus (meld1, meld2)
+    local sel1 = self:toSelection(meld1)
+    local sel2 = self:toSelection(meld2)
+    local newsel = Selection:plus(sel1, sel2)
+    return self:fromSelection(newsel)
 end
 
 return Meld

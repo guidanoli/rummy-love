@@ -1,9 +1,9 @@
 local inspect = require "inspect"
 local constants = require "rummy.constants"
 local utils = require "rummy.utils"
-local selection = require "rummy.selection"
 local Game = require "rummy.game"
 local Meld = require "rummy.meld"
+local Selection = require "rummy.selection"
 
 local rummy = {}
 
@@ -57,14 +57,20 @@ function rummy:getCardAtPosition (x, y)
     end
 end
 
-function rummy:moveSelectionSmoothly (sel)
-    for card in pairs(sel) do
+function rummy:moveMeldSmoothly (meld)
+    for _, card in ipairs(meld) do
+        self:moveCardSmoothly(card)
+    end
+end
+
+function rummy:moveSelectionSmoothly (selection)
+    for card in pairs(selection) do
         self:moveCardSmoothly(card)
     end
 end
 
 function rummy:moveCardSmoothly (card)
-    card.animation = {
+    card:setAnimation{
         name = 'smooth',
         time = 0,
         duration = 1,
@@ -73,171 +79,145 @@ function rummy:moveCardSmoothly (card)
     }
 end
 
-function rummy:isShiftPressed ()
-    return self.pressedKeys.lshift or
-           self.pressedKeys.rshift
-end
-
-function rummy:getSelectionFromShiftClick (card2)
-    local card1 = self.lastSelectedCard
-    if card1 ~= nil then
-        return self.game:getCardsBetween(card1, card2)
-    else
-        return selection:fromCard(card2)
-    end
-end
-
-function rummy:getSelectionFromClick (card)
-    if self:isShiftPressed() then
-        return self:getSelectionFromShiftClick(card)
-    else
-        return selection:fromCard(card)
-    end
-end
-
 function rummy:onCardLeftClick (card)
-    if card.where == 'stock' then
-        if self.game:isValid() then
-            self.game:addCardToHand(card)
-            self:moveCardSmoothly(card)
+    if card.origin == 'stock' then
+        if self.game:IsValid() then
+            local cards = self.game:getCards()
+            local newHand = Meld:plus(cards.hand, {card})
+            self.game:applyMeldOrder(newHand)
+            self.game:setOrigin(newHand, 'hand')
+            self:moveMeldSmoothly(newHand)
             self:clearHistory()
             self.updatePending = true
         end
     else
         if not card.animation then
-            local selection = self:getSelectionFromClick (card)
-            for card in pairs(selection) do
-                card.selected = not card.selected
-            end
-            self.lastSelectedCard = card
+            card.selected = not card.selected
             self.updatePending = true
         end
     end
 end
 
--- local function removeEmptyGames ()
---     local gpos = 1
---     for _, game in pairs(getGames()) do
---         if #game > 0 then
---             setGame(gpos, game)
---             gpos = gpos + 1
---         end
---     end
--- end
--- 
--- local function removeCardFromGame (card)
---     local game = getGame(card.gpos)
---     table.remove(game, card.pos)
---     setGame(card.gpos, game)
---     moveCardToLimbo(card)
--- end
--- 
--- local function removeCardFromHand (card)
---     local hand = getPlayerHand()
---     table.remove(hand, card.pos)
---     setPlayerHand(hand)
---     moveCardToLimbo(card)
--- end
--- 
--- local function addCardToGame (card, gpos)
---     local game = getGame(gpos)
---     table.insert(game, card)
---     setGame(gpos, game)
---     self:moveCardSmoothly(card)
--- end
--- 
--- local function addGameToTable (game)
---     local games = getGames()
---     table.insert(games, game)
---     setGames(games)
---     for _, card in ipairs(game) do
---         self:moveCardSmoothly(card)
---     end
--- end
-
-function rummy:unselect (sel)
-    for card in pairs(sel) do
-        card.selected = false
+function rummy:unselect (selection)
+    if selection == nil then
+        selection = self.game:getSelection()
     end
-    self.lastSelectedCard = nil
+    for card in pairs(selection) do
+        card:setSelected(false)
+    end
 end
 
--- local function moveCardsFromGameToGame (selection, destGamePos)
---     save()
---     for _, card in ipairs(selection) do
---         removeCardFromGame(card)
---         addCardToGame(card, destGamePos)
---     end
---     removeEmptyGames()
---     unselectCards(selection)
---     checkNextTurn()
--- end
--- 
--- local function moveCardsFromHandToGame (selection, destGamePos)
---     local n = #selection
---     if not state.hasPlacedCard and (n == 1 or n == 3) then
---         save()
---         state.hasPlacedCard = true
---         for _, card in ipairs(selection) do
---             removeCardFromHand(card)
---             addCardToGame(card, destGamePos)
---         end
---         unselectCards(selection)
---         checkNextTurn()
---     end
--- end
--- 
--- local function onCardRightClick (card)
---     if card.where == 'meld' then
---         local selection = getSelectionFromClick()
---         if #selection > 0 then
---             local selectionOrigin = getWhere(selection)
---             if selectionOrigin == 'meld' then
---                 moveCardsFromGameToGame(selection, card.gpos)
---             elseif selectionOrigin == 'hand' then
---                 moveCardsFromHandToGame(selection, card.gpos)
---             else
---                 print("Selected cards don't have a common origin")
---                 for _, card in ipairs(selection) do
---                     print('*', card.rank, 'of', card.suit, 'from', card.where)
---                 end
---             end
---         else
---             print('No cards selected')
---         end
---     elseif card.where == 'hand' then
---         print("Can't move cards to hand")
---     elseif card.where == 'stock' then
---         print("Can't move cards to stock")
---     end
--- end
-
-function rummy:moveSelectionFromMeldToTable (sel, smeld, meld)
-    local newmeld = self.game:subtract(meld, smeld)
-    if #newmeld == 0 then
-        self.game:updateMeldPos()
+function rummy:moveSelectionFromMeldToMeld (t)
+    local selectionMeld = Meld:fromSelection(t.selection)
+    for meldid, originMeld in pairs(t.selectionOriginExtra) do
+        local selectionSubset = self:filterSelectionByMeldId(t.selection, meldid)
+        local newOriginMeld = Meld:minus(originMeld, Meld:fromSelection(selectionSubset))
+        self.game:applyMeldOrder(newOriginMeld)
     end
-    self:moveSelectionSmoothly(sel)
-    self:unselect(sel)
+    local cards = self.game:getCards()
+    self:moveMeldSmoothly(selectionMeld)
+    for _, meld in pairs(cards.melds) do
+        self:moveMeldSmoothly(meld)
+    end
+    local clickedMeld = cards.melds[t.card.meldid]
+    local newClickedMeld = Meld:plus(clickedMeld, selectionMeld)
+    self.game:applyMeldOrder(newClickedMeld)
+    self.game:setMeldId(selectionMeld, t.card.meldid)
+    self:unselect(t.selection)
     self.updatePending = true
 end
 
-function rummy:moveSelectionFromHandToTable (sel, smeld, hand)
-    if Meld:isValid(smeld) then
-        self.game:subtract(hand, smeld)
-        self:moveSelectionSmoothly(sel)
-        self:unselect(sel)
-        self:clearHistory()
+function rummy:moveSelectionFromHandToMeld (t)
+    local selectionMeld = Meld:fromSelection(t.selection)
+    if #selectionMeld == 1 or #selectionMeld == 3 then
+        self:moveMeldSmoothly(t.selectionOriginExtra)
+        local newHand = Meld:minus(t.selectionOriginExtra, selectionMeld)
+        self.game:applyMeldOrder(newHand)
+        local cards = self.game:getCards()
+        for _, meld in pairs(cards.melds) do
+            self:moveMeldSmoothly(meld)
+        end
+        local clickedMeld = cards.melds[t.card.meldid]
+        local newClickedMeld = Meld:plus(clickedMeld, selectionMeld)
+        self.game:applyMeldOrder(newClickedMeld)
+        self.game:setOrigin(selectionMeld, 'meld')
+        self.game:setMeldId(selectionMeld, t.card.meldid)
+        assert(self:isGameValid())
+        self:unselect(t.selection)
         self.updatePending = true
     end
 end
 
-function rummy:onTableRightClick (sel, smeld, where, meld)
-    if where == 'meld' then
-        self:save()
-        self:moveSelectionFromMeldToTable(sel, smeld, meld)
-    elseif where == 'hand' then
-        self:moveSelectionFromHandToTable(sel, smeld, meld)
+function rummy:onCardRightClick (t)
+    if t.card.origin == 'meld' then
+        if t.selectionOrigin == 'meld' then
+            self:moveSelectionFromMeldToMeld(t)
+        elseif t.selectionOrigin == 'hand' then
+            self:moveSelectionFromHandToMeld(t)
+        end
+    end
+end
+
+function rummy:filterSelectionByMeldId (selection, meldid)
+    local function predicate (card)
+        return card.meldid == meldid
+    end
+    return Selection:filter(selection, predicate)
+end
+
+function rummy:moveSelectionFromMeldToTable (t)
+    local selectionMeld = Meld:fromSelection(t.selection)
+    for meldid, originMeld in pairs(t.selectionOriginExtra) do
+        local selectionSubset = self:filterSelectionByMeldId(t.selection, meldid)
+        local newOriginMeld = Meld:minus(originMeld, Meld:fromSelection(selectionSubset))
+        self.game:applyMeldOrder(newOriginMeld)
+    end
+    local cards = self.game:getCards()
+    self:moveMeldSmoothly(selectionMeld)
+    for _, meld in pairs(cards.melds) do
+        self:moveMeldSmoothly(meld)
+    end
+    self.game:applyMeldOrder(selectionMeld)
+    local newMeldId = self.game:getNewMeldId()
+    self.game:setMeldId(selectionMeld, newMeldId)
+    self:unselect(t.selection)
+    self.updatePending = true
+end
+
+function rummy:isGameValid()
+    return self.game:IsValid(),
+           "move cannot be applied because it would " ..
+           "leave the game in an inconsistent state"
+end
+
+function rummy:moveSelectionFromHandToTable (t)
+    local selectionMeld = Meld:fromSelection(t.selection)
+    self:moveMeldSmoothly(t.selectionOriginExtra)
+    local newHand = Meld:minus(t.selectionOriginExtra, selectionMeld)
+    self.game:applyMeldOrder(newHand)
+    self.game:applyMeldOrder(selectionMeld)
+    self.game:setOrigin(selectionMeld, 'meld')
+    local newMeldId = self.game:getNewMeldId()
+    self.game:setMeldId(selectionMeld, newMeldId)
+    assert(self:isGameValid())
+    self:unselect(t.selection)
+    self:clearHistory()
+    self.updatePending = true
+end
+
+function rummy:onTableRightClick (t)
+    if t.selectionOrigin == 'meld' then
+        self:moveSelectionFromMeldToTable(t)
+    elseif t.selectionOrigin == 'hand' then
+        self:moveSelectionFromHandToTable(t)
+    end
+end
+
+function rummy:onRightClick (t)
+    if t.card == nil then
+        self:onTableRightClick(t)
+    else
+        self:onCardRightClick(t)
     end
 end
 
@@ -269,8 +249,8 @@ function rummy:updateCardPositions ()
                 card.animation.yf = y
             end
         else
-            card.x = x
-            card.y = y
+            card:setX(x)
+            card:setY(y)
         end
     end
 
@@ -283,7 +263,8 @@ function rummy:updateCardPositions ()
     do
         local x = stockX
         local y = stockY + self.images.stock:getHeight() + margin + selectionLift
-        for _, meld in ipairs(cards.melds) do
+        for _, meldkey in ipairs(utils:sortedKeys(cards.melds)) do
+            local meld = cards.melds[meldkey]
             for i = 1, 2 do
                 for _, card in ipairs(meld) do
                     update(card, x, y)
@@ -316,7 +297,7 @@ function rummy:updateCardAnimations (dt)
             if card.animation.time + dt >= card.animation.duration then
                 card.animation.time = card.animation.duration
                 self:updateCardAnimation(card)
-                card.animation = nil
+                card:setAnimation(nil)
             else
                 card.animation.time = card.animation.time + dt
                 self:updateCardAnimation(card)
@@ -332,16 +313,20 @@ function rummy:updateCardAnimation (card)
         local xf = card.animation.xf
         local yf = card.animation.yf
         if xi and yi and xf and yf then
-            local t = card.animation.time / card.animation.duration
-            local p = (math.sin((t - 0.5) * math.pi) + 1) / 2
-            card.x = xi * (1 - p) + xf * p
-            card.y = yi * (1 - p) + yf * p
+            if xi == xf and yi == yf then
+                card:setAnimation(nil)
+            else
+                local t = card.animation.time / card.animation.duration
+                local p = (math.sin((t - 0.5) * math.pi) + 1) / 2
+                card:setX(xi * (1 - p) + xf * p)
+                card:setY(yi * (1 - p) + yf * p)
+            end
         end
     end
 end
 
 function rummy:getCardImage (card)
-    if card.where == 'stock' then
+    if card.origin == 'stock' then
         return self.images.stock
     else
         return self.images.card[card.suit][card.rank]
@@ -370,24 +355,22 @@ function rummy:load ()
     end
 
     self.updatePending = true
-
-    self.pressedKeys = {}
 end
  
 function rummy:draw ()
     local drawnStock = false
     for _, card in ipairs(self.cardRenderingOrder) do
-        if not (card.where == 'stock' and drawnStock) then
+        if not (card.origin == 'stock' and drawnStock) then
             local img = self:getCardImage(card)
             love.graphics.draw(img, card.x, card.y)
-            if card.where == 'stock' then
+            if card.origin == 'stock' then
                 drawnStock = true
             end
         end
     end
 end
 
-function rummy:mousepressed (x, y, button)
+function rummy:unsafemousepressed (x, y, button)
     if button == 1 then
         local card = self:getCardAtPosition(x, y)
         if card ~= nil then
@@ -395,23 +378,32 @@ function rummy:mousepressed (x, y, button)
         end
     elseif button == 2 then
         local card = self:getCardAtPosition(x, y)
-        local sel = self.game:getSelection()
-        local smeld = Meld:fromSelection(sel)
-        local where, meld = self.game:getWhere(sel)
-        if where ~= nil then
-            if card == nil then
-                self:onTableRightClick(sel, smeld, where, meld)
-            else
-                -- onCardRightClick(card)
-            end
+        local selection = self.game:getSelection()
+        local selectionOrigin, selectionOriginExtra = self.game:getSelectionOrigin(selection)
+        if selectionOrigin ~= nil then
+            self:onRightClick{
+                card = card,
+                selection = selection,
+                selectionOrigin = selectionOrigin,
+                selectionOriginExtra = selectionOriginExtra,
+            }
         end
+    end
+end
+
+function rummy:mousepressed (...)
+    self:save()
+    local ok, err = pcall(self.unsafemousepressed, self, ...)
+    if not ok then
+        print(err)
+        self:undo()
+        self.updatePending = true
     end
 end
  
 function rummy:keypressed (key)
-    self.pressedKeys[key] = true
     if key == 'c' then
-        self:unselect(self.game:getCardSet())
+        self:unselect()
         self.updatePending = true
     elseif key == 'u' then
         self:undo()
@@ -420,10 +412,6 @@ function rummy:keypressed (key)
             print(inspect(self.game))
         end
     end
-end
-
-function rummy:keyreleased (key)
-    self.pressedKeys[key] = nil
 end
 
 function rummy:update (dt)

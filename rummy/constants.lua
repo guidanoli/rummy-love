@@ -23,16 +23,16 @@ do
 end
 
 do
-    local where = {
+    local origins = {
         "stock",
         "hand",
         "meld",
     }
-    local whereSet = {}
-    for _, w in pairs(where) do
-        whereSet[w] = true
+    local originSet = {}
+    for _, origin in pairs(origins) do
+        originSet[origin] = true
     end
-    constants.where = whereSet
+    constants.origins = originSet
 end
 
 do

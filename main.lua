@@ -19,7 +19,3 @@ end
 function love.keypressed (...)
     return rummy:keypressed(...)
 end
-
-function love.keyreleased (...)
-    return rummy:keyreleased(...)
-end

@@ -15,8 +15,8 @@ local validators = {
     suit = function (s)
         assert(constants.suits[s] == true)
     end,
-    where = function (w)
-        assert(constants.where[w] == true)
+    origin = function (o)
+        assert(constants.origins[o] == true)
     end,
     pos = function (p)
         assert(type(p) == 'number')
@@ -31,16 +31,18 @@ local validators = {
         assert(y >= 0)
     end,
     animation = function (a)
-        assert(type(a) == 'table')
-        assert(constants.animations[a.name] == true)
-        assert(type(a.time) == 'number')
-        assert(type(a.duration) == 'number')
+        if a ~= nil then
+            assert(type(a) == 'table')
+            assert(constants.animations[a.name] == true)
+            assert(type(a.time) == 'number')
+            assert(type(a.duration) == 'number')
+        end
     end,
     selected = function (s)
         assert(type(s) == 'boolean')
     end,
-    meldpos = function (m)
-        assert(m == nil or type(m) == 'number')
+    meldid = function (m)
+        assert(type(m) == 'number')
     end
 }
 
@@ -64,6 +66,41 @@ function Card:new(t)
     end
     setmetatable(t, self)
     return t
+end
+
+function Card:setOrigin(origin)
+    validate('origin', origin)
+    self.origin = origin
+end
+
+function Card:setPos(pos)
+    validate('pos', pos)
+    self.pos = pos
+end
+
+function Card:setX(x)
+    validate('x', x)
+    self.x = x
+end
+
+function Card:setY(y)
+    validate('y', y)
+    self.y = y
+end
+
+function Card:setAnimation(animation)
+    validate('animation', animation)
+    self.animation = animation
+end
+
+function Card:setSelected(selected)
+    validate('selected', selected)
+    self.selected = selected
+end
+
+function Card:setMeldId(meldid)
+    validate('meldid', meldid)
+    self.meldid = meldid
 end
 
 return Card

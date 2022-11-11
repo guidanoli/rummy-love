@@ -1,6 +1,6 @@
 local constants = require "rummy.constants"
 local utils = require "rummy.utils"
-local selection = require "rummy.selection"
+local Selection = require "rummy.selection"
 local Card = require "rummy.card"
 local Meld = require "rummy.meld"
 
@@ -27,7 +27,7 @@ function Game:_newCards ()
             local card = Card:new{
                 suit = suit,
                 rank = rank,
-                where = 'stock',
+                origin = 'stock',
             }
             table.insert(cards, card)
         end
@@ -41,20 +41,22 @@ function Game:_newCards ()
     return cardSet
 end
 
-function Game:_dealCards ()
-    local cards = self:getCards()
-    local hand = {}
-    for i = 1, 9 do
-        local card = table.remove(cards.stock)
-        card.where = 'hand'
-        hand[i] = card
+function Game:applyMeldOrder (meld)
+    for pos, card in ipairs(meld) do
+        card:setPos(pos)
     end
-    Meld:sort(hand)
-    Meld:updatePos(hand)
 end
 
-function Game:getCardSet ()
-    return self.cards
+function Game:_dealCards ()
+    local cards = self:getCards()
+    local handSelection = {}
+    for i = 1, 9 do
+        local card = table.remove(cards.stock)
+        handSelection[card] = true
+    end
+    local hand = Meld:fromSelection(handSelection)
+    self:applyMeldOrder(hand)
+    self:setOrigin(hand, 'hand')
 end
 
 function Game:iterCards ()
@@ -66,19 +68,19 @@ function Game:getCards ()
     local hand = {}
     local melds = {}
     for card in self:iterCards() do
-        if card.where == 'stock' then
+        if card.origin == 'stock' then
             stock[card.pos] = card
-        elseif card.where == 'hand' then
+        elseif card.origin == 'hand' then
             hand[card.pos] = card
-        elseif card.where == 'meld' then
-            local meld = melds[card.meldpos]
+        elseif card.origin == 'meld' then
+            local meld = melds[card.meldid]
             if meld == nil then
                 meld = {}
-                melds[card.meldpos] = meld
+                melds[card.meldid] = meld
             end
             meld[card.pos] = card
         else
-            error("invalid where")
+            error("invalid origin")
         end
     end
     return {
@@ -88,7 +90,7 @@ function Game:getCards ()
     }
 end
 
-function Game:isValid ()
+function Game:IsValid ()
     local cards = self:getCards()
     for _, meld in pairs(cards.melds) do
         if not Meld:isValid(meld) then
@@ -102,33 +104,9 @@ function Game:addCardToHand (card)
     local cards = self:getCards()
     local hand = cards.hand
     table.insert(hand, card)
-    card.where = 'hand'
+    card:setOrigin('hand')
     Meld:sort(hand)
-    Meld:updatePos(hand)
-end
-
-function Game:getCardsBetween (card1, card2)
-    local cardsInBetween = {}
-    local cards = self:getCards()
-    local pos1, pos2 = utils:orderOpenEnded(card1.pos, card2.pos)
-    if card1.where == card2.where then
-        if card1.where == 'meld' then
-            if card1.meldpos == card2.meldpos then
-                local meld = cards.melds[card1.meldpos]
-                for pos = pos1, pos2 do
-                    local card = meld[pos]
-                    cardsInBetween[card] = true
-                end
-            end
-        elseif card1.where == 'hand' then
-            local hand = cards.hand
-            for pos = pos1, pos2 do
-                local card = hand[pos]
-                cardsInBetween[card] = true
-            end
-        end
-    end
-    return cardsInBetween
+    self:applyMeldOrder(hand)
 end
 
 function Game:getSelection ()
@@ -141,63 +119,55 @@ function Game:getSelection ()
     return sel
 end
 
--- Subtract meld2 from meld1
--- Moves meld2 to its own meld
--- Ensure meld1 and meld2 are valid melds
--- Returns updated meld1
--- Arguments:
---   meld1 : Meld
---   meld2 : Meld
--- Returns:
---   [0] : Meld
-function Game:subtract (meld1, meld2)
-    local newmeld1 = Meld:subtract(meld1, meld2)
-    Meld:updatePos(meld2)
-    local cards = self:getCards()
-    local meldpos = #cards.melds + 1
-    for _, card in ipairs(meld2) do
-        card.where = 'meld'
-        card.meldpos = meldpos
-    end
-    return newmeld1
-end
-
-function Game:updateMeldPos ()
-    local cards = self:getCards()
-    local sortedPos = utils:sortedKeys(cards.melds)
-    for newPos, oldPos in ipairs(sortedPos) do
-        local meld = cards.melds[oldPos]
-        for _, card in pairs(meld) do
-            card.meldpos = newPos
-        end
-    end
-end
-
 function Game:clone ()
     return utils:deepCopy(self)
 end
 
--- Get the common origin of a selection
--- If there is one, returns the meld too
--- Otherwise, returns nil
--- Arguments:
---   sel : Selection
--- Returns:
---   [0] : string?
---   [1] : Meld?
-function Game:getWhere (sel)
-    local where = selection:getWhere(sel)
+function Game:getSelectionOrigin (sel)
+    local origin = Selection:getOrigin(sel)
     local cards = self:getCards()
-    local meld
-    if where == 'meld' then
-        local card = next(sel)
-        meld = cards.melds[card.meldpos]
-    elseif where == 'hand' then
-        meld = cards.hand
-    elseif where == 'stock' then
-        meld = cards.stock
+
+    local function extra ()
+        if origin == 'meld' then
+            local melds = {}
+            for card in pairs(sel) do
+                local meldid = card.meldid
+                local meld = cards.melds[meldid]
+                melds[meldid] = meld
+            end
+            return melds
+        elseif origin == 'hand' then
+            return cards.hand
+        elseif origin == 'stock' then
+            return cards.stock
+        end
     end
-    return where, meld
+
+    return origin, extra()
+end
+
+function Game:getNewMeldId ()
+    local id
+    for card in self:iterCards() do
+        if card.origin == 'meld' and card.meldid ~= nil then
+            if id == nil or card.meldid > id then
+                id = card.meldid
+            end
+        end
+    end
+    return id and (id + 1) or 1
+end
+
+function Game:setMeldId (meld, meldid)
+    for _, card in ipairs(meld) do
+        card:setMeldId(meldid)
+    end
+end
+
+function Game:setOrigin (meld, origin)
+    for _, card in ipairs(meld) do
+        card:setOrigin(origin)
+    end
 end
 
 return Game
